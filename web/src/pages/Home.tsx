@@ -129,8 +129,8 @@ export function Home(props: {
 
   return (
     <main className="library-app-shell">
-      <aside className="library-rail" aria-label="小书房导航">
-        <strong>冰冰和星星的小书房</strong>
+      <aside className="library-rail" aria-label="阅读器导航">
+        <strong>和G老师一起读书</strong>
         <nav>
           {LIBRARY_NAV.map((item) => {
             const Icon = item.icon;
@@ -153,8 +153,8 @@ export function Home(props: {
       <section className="home-shell">
         <header className="library-header">
           <div>
-            <span className="visually-hidden">冰冰和星星的小书房</span>
-            <span className="library-kicker">冰冰和星星的小书房</span>
+            <span className="visually-hidden">和G老师一起读书</span>
+            <span className="library-kicker">和G老师一起读书</span>
             <h1>{headerCopy.title}</h1>
             <p>{headerCopy.subtitle}</p>
           </div>
@@ -211,7 +211,7 @@ export function Home(props: {
           </button>
         </div>
 
-        <div className="library-mobile-tabs" aria-label="小书房视图">
+        <div className="library-mobile-tabs" aria-label="阅读器视图">
           <button
             type="button"
             aria-pressed={view === "library"}
@@ -519,7 +519,7 @@ function DefaultCover(props: { item: BookshelfItem; palette: number; compact?: b
       <span className={`library-cover library-cover-${props.palette} ${props.compact ? "compact" : ""}`} aria-hidden="true">
         <span className="library-cover-shine" />
       <span className="library-cover-title" data-title={coverTitle(props.item.session.title)} />
-      <span className="library-cover-mark">小书房</span>
+      <span className="library-cover-mark">阅读器</span>
     </span>
   );
 }

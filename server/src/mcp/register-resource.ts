@@ -9,7 +9,7 @@ import {
 } from "./register-tools.js";
 
 const READING_NEST_DESCRIPTION =
-  "一个温暖的移动端共读小窝，用于阅读用户自己粘贴或导入的小说文本。";
+  "一个移动端优先的私人阅读器，用于阅读用户自己粘贴或导入的文本。";
 
 type ReadingResourceBootstrap = Record<string, unknown>;
 type ReadingResourceBootstrapLoader = () => Promise<ReadingResourceBootstrap>;
@@ -78,10 +78,10 @@ export function registerReadingResource(
   for (const uri of [READING_NEST_URI, ...READING_NEST_LEGACY_URIS]) {
     registerAppResource(
       server,
-      "冰冰和星星的小书房",
+      "和G老师一起读书",
       uri,
       {
-        description: "移动端优先的小说共读小窝",
+        description: "移动端优先的私人阅读器",
         _meta: resourceMeta
       },
       async () => {
@@ -119,7 +119,7 @@ export function registerReadingCompatibilityProbeResource(server: McpServer, wor
     widgetDomain,
     resourceCsp,
     openaiWidgetCsp,
-    "一个最小的 ChatGPT App 组件，用于确认原生客户端能否渲染 冰冰和星星的小书房 小窝。"
+    "一个最小的 ChatGPT App 组件，用于确认原生客户端能否渲染“和G老师一起读书”阅读器。"
   );
 
   for (const uri of [
@@ -128,10 +128,10 @@ export function registerReadingCompatibilityProbeResource(server: McpServer, wor
   ]) {
     registerAppResource(
       server,
-      "冰冰和星星的小书房 App 兼容性检查",
+      "和G老师一起读书 App 兼容性检查",
       uri,
       {
-        description: "一个最小的 ChatGPT App 组件，用于确认原生客户端能否渲染 冰冰和星星的小书房 小窝。",
+        description: "一个最小的 ChatGPT App 组件，用于确认原生客户端能否渲染“和G老师一起读书”阅读器。",
         _meta: resourceMeta
       },
       async () => ({

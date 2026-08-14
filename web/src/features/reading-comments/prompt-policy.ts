@@ -39,7 +39,7 @@ export function buildReadingCommentPrompt(input: {
   ];
   const modeInstructions = modeInstruction(input.mode);
   const publication = [
-    "本次小书房不会自动把共读回应保存到书内。",
+    "本次阅读器不会自动把共读回应保存到书内。",
     "不要调用任何应用写回工具；直接在聊天区回复即可。",
     "不要说共读回应已保存，也不要显示同步诊断，因为本次没有尝试写回。"
   ];
@@ -55,7 +55,7 @@ export function buildLiveReadingPrompt(input: {
   requestedLength?: CommentLength;
 }): string {
   const publication = [
-    "本次小书房不会自动把共读回应保存到书内。",
+    "本次阅读器不会自动把共读回应保存到书内。",
     "不要调用任何应用写回工具；直接在聊天区回复即可。"
   ];
   return [

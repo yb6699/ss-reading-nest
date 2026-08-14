@@ -54,7 +54,7 @@ R2 保存完整正文和 source manifest。上传时计算 SHA-256、记录分�
 
 IndexedDB 保存当前设备的正文和分段结果。它用于快速打开，不是唯一真相来源。缓存缺失时，UI 根据 source manifest 从 R2 恢复并重建缓存。
 
-## 4. 打开小书房的完整链路
+## 4. 打开阅读器的完整链路
 
 ```mermaid
 sequenceDiagram
@@ -65,7 +65,7 @@ sequenceDiagram
     participant R as UI resource
     participant UI as React 组件
 
-    U->>H: 打开小书房
+    U->>H: 打开阅读器
     H->>M: tools/call open_reading_nest
     M->>D: 读取多书快照
     D-->>M: session bundles
@@ -103,7 +103,7 @@ sequenceDiagram
 
 ## 6. 共读链路
 
-“和星星共读”不直接把整页正文写进可见消息：
+“和G老师共读”不直接把整页正文写进可见消息：
 
 1. UI 发送简短、自然的共读请求。
 2. 模型调用 `read_shared_page_context`。

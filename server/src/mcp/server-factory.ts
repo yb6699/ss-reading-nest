@@ -16,7 +16,7 @@ export function createMcpServerFromRepository(
   options: { sourceEndpointBase?: string; workerOrigin?: string; lightweightSchemas?: boolean } = {}
 ) {
   const server = new McpServer({
-    name: "冰冰和星星的小书房",
+    name: "和G老师一起读书",
     version: READING_NEST_APP_VERSION
   });
   const service = new ReadingService(repository);
