@@ -1160,7 +1160,7 @@ html[data-display-mode="fullscreen"] .app {
 .reader-actions {
   z-index: 4;
   display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(78px, .72fr) minmax(0, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   padding: 12px max(14px, var(--safe-right)) calc(12px + var(--safe-bottom)) max(14px, var(--safe-left));
   border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
