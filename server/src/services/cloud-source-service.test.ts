@@ -4,6 +4,7 @@ import { MemorySourceObjectStorage } from "../storage/memory-source-object-stora
 import type { ReadingRepository } from "../repositories/reading-repository.js";
 import { CloudSourceService } from "./cloud-source-service.js";
 import {
+  buildPdfDocumentSource,
   DEFAULT_SESSION_PREFERENCES,
   NOVEL_SEGMENTATION_VERSION,
   type ReadingDatabase
@@ -54,6 +55,51 @@ describe("CloudSourceService", () => {
     expect(stored).toContain(result.sourceManifest.cloudSync.objectKey!);
     expect(stored).not.toContain("第一段");
     expect(stored).not.toContain("第二段");
+  });
+
+  it("stores, restores, and deletes PDF document structure alongside source text", async () => {
+    const { cloudSource, storage, sessionId } = setup();
+    const pdf = buildPdfDocumentSource([
+      {
+        pdfPageNumber: 18,
+        printedPageLabel: "153",
+        text: "第十八页正文。"
+      },
+      {
+        pdfPageNumber: 19,
+        printedPageLabel: "154",
+        text: "第十九页正文。"
+      }
+    ]);
+
+    const uploaded = await cloudSource.uploadNovelSource({
+      sessionId,
+      sourceText: pdf.sourceText,
+      sourceKind: "file_import",
+      title: "PDF 测试书",
+      documentStructure: pdf.documentStructure
+    });
+
+    expect(uploaded.sourceManifest.cloudSync.documentObjectKey).toBe(
+      `private/sources/${uploaded.sourceManifest.sourceId}/document.json`
+    );
+    expect(uploaded.sourceManifest.paragraphCount).toBe(2);
+
+    const documentObject = await storage.getObject(
+      uploaded.sourceManifest.cloudSync.documentObjectKey!
+    );
+    expect(JSON.parse(new TextDecoder().decode(documentObject.bytes))).toEqual(
+      pdf.documentStructure
+    );
+
+    const restored = await cloudSource.restoreNovelSource(sessionId);
+    expect(restored.sourceText).toBe(pdf.sourceText);
+    expect(restored.documentStructure).toEqual(pdf.documentStructure);
+
+    await cloudSource.deleteCloudSource(sessionId);
+    await expect(
+      storage.headObject(uploaded.sourceManifest.cloudSync.documentObjectKey!)
+    ).resolves.toEqual({ exists: false });
   });
 
   it("counts numbered platform-style novel sections as separate cloud reading units", async () => {

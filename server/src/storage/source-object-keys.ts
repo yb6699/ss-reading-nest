@@ -10,6 +10,11 @@ export function buildSourceManifestObjectKey(sourceId: string): string {
   return `private/sources/${safeSourceId}/manifest.json`;
 }
 
+export function buildDocumentStructureObjectKey(sourceId: string): string {
+  const safeSourceId = validateSourceId(sourceId);
+  return `private/sources/${safeSourceId}/document.json`;
+}
+
 function validateSourceId(sourceId: string): string {
   if (!SOURCE_ID_PATTERN.test(sourceId) || sourceId.includes("..")) {
     throw new Error("sourceId must be an opaque path-safe id");

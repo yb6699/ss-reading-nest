@@ -104,6 +104,7 @@ export interface CloudSyncMetadata {
   provider: "r2";
   objectKey?: string;
   manifestObjectKey?: string;
+  documentObjectKey?: string;
   uploadedAt?: string;
   sizeBytes?: number;
   mimeType?: string;
@@ -228,6 +229,7 @@ export interface NovelLocalCache {
   metadata: LocalCacheMetadata & { type: "novel" };
   sourceText: string;
   chunks: string[];
+  documentStructure?: DocumentStructure;
 }
 
 export type ReadingLocalCache = NovelLocalCache;

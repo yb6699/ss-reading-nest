@@ -2,6 +2,9 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   DEFAULT_SESSION_PREFERENCES,
   NOVEL_SEGMENTATION_VERSION,
+  isPdfDocumentStructure,
+  splitPdfDocumentSource,
+  type DocumentStructure,
   type ReadingPosition,
   splitNovelText,
   splitNovelTextForVersion,
@@ -13,6 +16,7 @@ import {
 import { AppError } from "../errors/app-error.js";
 import type { ReadingRepository } from "../repositories/reading-repository.js";
 import {
+  buildDocumentStructureObjectKey,
   buildSourceManifestObjectKey,
   buildSourceObjectKey
 } from "../storage/source-object-keys.js";
@@ -43,6 +47,7 @@ export class CloudSourceService {
     sourceText: string;
     sourceKind: Extract<SourceKind, "pasted_text" | "file_import">;
     title?: string;
+    documentStructure?: DocumentStructure;
     readingState?: SyncedReadingState;
   }): Promise<{ sourceManifest: SourceManifest }> {
     const normalizedText = normalizeNovelSourceText(input.sourceText);
@@ -50,18 +55,29 @@ export class CloudSourceService {
     const sourceId = this.deps.id();
     const objectKey = buildSourceObjectKey(sourceId);
     const manifestObjectKey = buildSourceManifestObjectKey(sourceId);
+    const documentObjectKey = input.documentStructure
+      ? buildDocumentStructureObjectKey(sourceId)
+      : undefined;
+    const paragraphCount = input.documentStructure
+      ? splitPdfDocumentSource(
+          normalizedText,
+          input.documentStructure,
+          NOVEL_SEGMENTATION_VERSION
+        ).length
+      : splitNovelText(normalizedText).length;
     const sourceManifest: SourceManifest = {
       sourceId,
       sourceKind: input.sourceKind,
       ...(input.title ? { title: input.title } : {}),
       contentHash: sha256Hex(bytes),
       segmentationVersion: NOVEL_SEGMENTATION_VERSION,
-      paragraphCount: splitNovelText(normalizedText).length,
+      paragraphCount,
       cloudSync: {
         enabled: true,
         provider: "r2",
         objectKey,
         manifestObjectKey,
+        ...(documentObjectKey ? { documentObjectKey } : {}),
         uploadedAt: this.deps.now().toISOString(),
         sizeBytes: bytes.byteLength,
         mimeType: "text/plain;charset=utf-8"
@@ -75,6 +91,14 @@ export class CloudSourceService {
       bytes,
       contentType: "text/plain;charset=utf-8"
     });
+    if (documentObjectKey && input.documentStructure) {
+      await this.storage.putObject({
+        key: documentObjectKey,
+        bytes: new TextEncoder().encode(JSON.stringify(input.documentStructure)),
+        contentType: "application/json"
+      });
+    }
+
     await this.storage.putObject({
       key: manifestObjectKey,
       bytes: new TextEncoder().encode(JSON.stringify(sourceManifest)),
@@ -97,6 +121,7 @@ export class CloudSourceService {
     title: string;
     sourceText: string;
     sourceKind: Extract<SourceKind, "pasted_text" | "file_import">;
+    documentStructure?: DocumentStructure;
     readingState?: SyncedReadingState;
   }): Promise<{ session: ReadingSession; sourceManifest: SourceManifest }> {
     const session = await this.repository.mutate((database) => {
@@ -127,6 +152,9 @@ export class CloudSourceService {
       sourceText: input.sourceText,
       sourceKind: input.sourceKind,
       title: input.title,
+      ...(input.documentStructure
+        ? { documentStructure: input.documentStructure }
+        : {}),
       ...(input.readingState ? { readingState: input.readingState } : {})
     });
     return {
@@ -181,6 +209,7 @@ export class CloudSourceService {
   async restoreNovelSource(sessionId: string): Promise<{
     sourceText: string;
     sourceManifest: SourceManifest;
+    documentStructure?: DocumentStructure;
   }> {
     const sourceManifest = await this.requireCloudSourceManifest(sessionId);
     const objectKey = sourceManifest.cloudSync.objectKey;
@@ -202,13 +231,50 @@ export class CloudSourceService {
     if (sha256Hex(bytes) !== sourceManifest.contentHash) {
       throw new AppError("INVALID_OPERATION", "云端正文 hash 校验失败。");
     }
-    if (
-      countNovelParagraphsForManifest(normalizedText, sourceManifest) !==
-      sourceManifest.paragraphCount
-    ) {
+    let documentStructure: DocumentStructure | undefined;
+    const documentObjectKey = sourceManifest.cloudSync.documentObjectKey;
+
+    if (documentObjectKey) {
+      try {
+        const documentObject = await this.storage.getObject(documentObjectKey);
+        const parsed = JSON.parse(
+          new TextDecoder().decode(documentObject.bytes)
+        ) as unknown;
+
+        if (!isPdfDocumentStructure(parsed)) {
+          throw new Error("Invalid PDF document structure");
+        }
+
+        documentStructure = parsed;
+      } catch (error) {
+        if (error instanceof SourceObjectNotFoundError) {
+          throw new AppError("INVALID_OPERATION", "云端文档结构对象不存在。");
+        }
+        if (error instanceof AppError) throw error;
+        throw new AppError("INVALID_OPERATION", "云端文档结构无效。");
+      }
+    }
+
+    let paragraphCount: number;
+    try {
+      paragraphCount = countNovelParagraphsForManifest(
+        normalizedText,
+        sourceManifest,
+        documentStructure
+      );
+    } catch {
+      throw new AppError("INVALID_OPERATION", "云端文档结构与正文不匹配。");
+    }
+
+    if (paragraphCount !== sourceManifest.paragraphCount) {
       throw new AppError("INVALID_OPERATION", "云端正文分段数量校验失败。");
     }
-    return { sourceText: normalizedText, sourceManifest };
+
+    return {
+      sourceText: normalizedText,
+      sourceManifest,
+      ...(documentStructure ? { documentStructure } : {})
+    };
   }
 
   async getCloudSourceStatus(sessionId: string): Promise<{
@@ -236,7 +302,11 @@ export class CloudSourceService {
     const cloudSync = session.sourceManifest?.cloudSync;
     if (!cloudSync?.enabled) return { deleted: false, cloudSourceDeleted: false };
 
-    const keys = [cloudSync.objectKey, cloudSync.manifestObjectKey].filter(
+    const keys = [
+      cloudSync.objectKey,
+      cloudSync.manifestObjectKey,
+      cloudSync.documentObjectKey
+    ].filter(
       (key): key is string => Boolean(key)
     );
 
@@ -273,9 +343,19 @@ export function normalizeNovelSourceText(sourceText: string): string {
 
 function countNovelParagraphsForManifest(
   sourceText: string,
-  sourceManifest: SourceManifest
+  sourceManifest: SourceManifest,
+  documentStructure?: DocumentStructure
 ): number {
-  return splitNovelTextForVersion(sourceText, sourceManifest.segmentationVersion).length;
+  return documentStructure
+    ? splitPdfDocumentSource(
+        sourceText,
+        documentStructure,
+        sourceManifest.segmentationVersion
+      ).length
+    : splitNovelTextForVersion(
+        sourceText,
+        sourceManifest.segmentationVersion
+      ).length;
 }
 
 function sha256Hex(bytes: Uint8Array): string {

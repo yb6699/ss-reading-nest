@@ -2,7 +2,12 @@ import { AppError } from "./errors/app-error.js";
 import { sanitizeBookshelfBundle } from "./privacy/sanitize-bookshelf.js";
 import type { CloudSourceService } from "./services/cloud-source-service.js";
 import type { ReadingService } from "./services/reading-service.js";
-import { syncedReadingStateSchema, type SyncedReadingState } from "@ss/shared";
+import {
+  isPdfDocumentStructure,
+  syncedReadingStateSchema,
+  type DocumentStructure,
+  type SyncedReadingState
+} from "@ss/shared";
 
 export async function handleSourceRoute(
   request: Request,
@@ -45,6 +50,7 @@ export async function handleSourceRoute(
     if (url.pathname.endsWith("/upload")) {
       const input = await readJson(request);
       const sourceKind = readSourceKind(input);
+      const documentStructure = readOptionalDocumentStructure(input);
       const readingState = readOptionalReadingState(input);
       const paragraphCount = countParagraphs(
         typeof input.sourceText === "string" ? input.sourceText : ""
@@ -61,6 +67,7 @@ export async function handleSourceRoute(
               title: common.title ?? "未命名小说",
               sourceKind,
               sourceText: readString(input, "sourceText"),
+              ...(documentStructure ? { documentStructure } : {}),
               ...(readingState ? { readingState } : {})
             })
           : await service.uploadNovelSource({
@@ -68,6 +75,7 @@ export async function handleSourceRoute(
               ...common,
               sourceKind,
               sourceText: readString(input, "sourceText"),
+              ...(documentStructure ? { documentStructure } : {}),
               ...(readingState ? { readingState } : {})
             });
       logSourceRoute({ route: "upload", sourceKind, status: 200, paragraphCount });
@@ -126,6 +134,18 @@ function readString(input: Record<string, unknown>, key: string): string {
 function readOptionalString(input: Record<string, unknown>, key: string): string | undefined {
   const value = input[key];
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function readOptionalDocumentStructure(
+  input: Record<string, unknown>
+): DocumentStructure | undefined {
+  if (input.documentStructure === undefined) return undefined;
+
+  if (!isPdfDocumentStructure(input.documentStructure)) {
+    throw new AppError("INVALID_OPERATION", "文档结构格式无效。");
+  }
+
+  return input.documentStructure;
 }
 
 function readOptionalReadingState(input: Record<string, unknown>): SyncedReadingState | undefined {

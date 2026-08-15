@@ -1,8 +1,10 @@
 import {
   READING_NEST_APP_VERSION,
   READING_NEST_RESOURCE_VERSION,
+  type DocumentStructure,
   type ReadingRecord,
   type SessionBundle,
+  type SourceKind,
   type SourceManifest
 } from "@ss/shared";
 import type { ToolCallResult } from "../../types/openai.js";
@@ -46,21 +48,30 @@ export class CloudSourceClient {
     sessionId: string;
     title?: string;
     sourceText: string;
+    sourceKind?: SourceKind;
+    documentStructure?: DocumentStructure;
   }): Promise<CloudSourceUploadResult> {
+    const sourceKind = input.sourceKind ?? "pasted_text";
     if (hasPrivateSourceEndpoint(this.endpointBase)) {
       return this.uploadViaDirect({
         sessionId: input.sessionId,
-        sourceKind: "pasted_text",
+        sourceKind,
         ...(input.title ? { title: input.title } : {}),
-        sourceText: input.sourceText
+        sourceText: input.sourceText,
+        ...(input.documentStructure
+          ? { documentStructure: input.documentStructure }
+          : {})
       });
     }
     if (this.toolCaller && new Blob([input.sourceText]).size <= MAX_BRIDGE_NOVEL_UPLOAD_BYTES) {
       return this.uploadViaTool({
         sessionId: input.sessionId,
-        sourceKind: "pasted_text",
+        sourceKind,
         ...(input.title ? { title: input.title } : {}),
-        sourceText: input.sourceText
+        sourceText: input.sourceText,
+        ...(input.documentStructure
+          ? { documentStructure: input.documentStructure }
+          : {})
       });
     }
     if (this.toolCaller) {
@@ -85,8 +96,16 @@ export class CloudSourceClient {
 
   async restoreNovelSource(input: {
     sessionId: string;
-  }): Promise<{ sourceText: string; sourceManifest: SourceManifest }> {
-    return this.post<{ sourceText: string; sourceManifest: SourceManifest }>("/restore", {
+  }): Promise<{
+    sourceText: string;
+    sourceManifest: SourceManifest;
+    documentStructure?: DocumentStructure;
+  }> {
+    return this.post<{
+      sourceText: string;
+      sourceManifest: SourceManifest;
+      documentStructure?: DocumentStructure;
+    }>("/restore", {
       sessionId: input.sessionId
     });
   }
