@@ -1107,6 +1107,20 @@ html[data-display-mode="fullscreen"] .app {
   line-height: 1.95;
   text-wrap: pretty;
 }
+.pdf-page-label {
+  width: fit-content;
+  margin: 0 0 18px;
+  padding: 4px 9px;
+  border: 1px solid color-mix(in srgb, var(--muted) 24%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  color: var(--muted);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 1.4;
+  letter-spacing: .02em;
+}
+
 .novel-paper p { margin-bottom: 1.22em; }
 .novel-paper mark,
 .quote-highlight {

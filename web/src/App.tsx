@@ -191,6 +191,32 @@ export function App() {
   const [selectedBook, setSelectedBook] = useState<BookshelfItem | null>(null);
   const [readerReturnScreen, setReaderReturnScreen] = useState<"home" | "cover">("home");
   const [chunks, setChunks] = useState<string[]>([]);
+  const pdfPageNumbers = useMemo(() => {
+    if (!sourceDocumentStructure || !sourceText) return undefined;
+
+    const segmentationVersion =
+      sessionBundle?.session.sourceManifest?.segmentationVersion ??
+      existingSession?.sourceManifest?.segmentationVersion ??
+      NOVEL_SEGMENTATION_VERSION;
+
+    try {
+      const pageNumbers = splitPdfDocumentSource(
+        sourceText,
+        sourceDocumentStructure,
+        segmentationVersion
+      ).map((chunk) => chunk.pdfPageNumber);
+
+      return pageNumbers.length === chunks.length ? pageNumbers : undefined;
+    } catch {
+      return undefined;
+    }
+  }, [
+    chunks.length,
+    existingSession?.sourceManifest?.segmentationVersion,
+    sessionBundle?.session.sourceManifest?.segmentationVersion,
+    sourceDocumentStructure,
+    sourceText
+  ]);
   const [overlay, setOverlay] = useState<Overlay>(null);
   const [toast, setToast] = useState("");
   const [startReadingInFlight, setStartReadingInFlight] = useState(false);
@@ -2105,6 +2131,7 @@ export function App() {
         <NovelReader
           session={sessionBundle.session}
           chunks={chunks}
+          pdfPageNumbers={pdfPageNumbers}
           savedQuotes={sessionBundle.quotes}
           onPosition={changePosition}
           onSharePage={shareNovelPage}

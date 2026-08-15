@@ -22,6 +22,7 @@ type SelectionMode = "thought" | "question" | null;
 export function NovelReader(props: {
   session: ReadingSession;
   chunks: string[];
+  pdfPageNumbers?: number[];
   savedQuotes: Quote[];
   onPosition: (index: number) => void;
   onSharePage: (currentText: string) => Promise<void> | void;
@@ -53,6 +54,7 @@ export function NovelReader(props: {
     Math.min(props.chunks.length - 1, props.session.userCurrentPosition.index - 1)
   );
   const current = props.chunks[index] ?? "";
+  const currentPdfPage = props.pdfPageNumbers?.[index];
   const currentQuotes = useMemo(
     () =>
       props.savedQuotes.filter(
@@ -358,6 +360,9 @@ export function NovelReader(props: {
             }}
           >
           <article ref={articleRef} className="novel-paper">
+            {currentPdfPage ? (
+              <div className="pdf-page-label">PDF 第 {currentPdfPage} 页</div>
+            ) : null}
             {current.split("\n").map((line, lineIndex) => (
               <p key={lineIndex}>{highlightLine(line, currentQuotes, openQuoteDetail)}</p>
             ))}
