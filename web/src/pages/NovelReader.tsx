@@ -82,6 +82,7 @@ export function NovelReader(props: {
   const [clearThoughtSaving, setClearThoughtSaving] = useState(false);
   const [deleteConfirming, setDeleteConfirming] = useState(false);
   const [navigationOpen, setNavigationOpen] = useState(false);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
   const [jumpPage, setJumpPage] = useState(String(index + 1));
   const [jumpError, setJumpError] = useState("");
   const previous = () => props.onPosition(Math.max(1, index));
@@ -100,6 +101,7 @@ export function NovelReader(props: {
     setClearThoughtDraft("");
     setClearThoughtEditing(false);
     setThoughtsCardOpen(false);
+    setCopyState("idle");
   }, [index]);
 
   useEffect(() => {
@@ -282,6 +284,47 @@ export function NovelReader(props: {
         ) : null}
       </main>
     );
+  }
+
+  async function copyCurrentPageForG() {
+    const thoughtText = currentThoughts
+      .map((quote, thoughtIndex) => {
+        const parts = [
+          `【想法 ${thoughtIndex + 1}】`,
+          `原文：${normalizeQuote(quote.content)}`,
+          `我的想法：${quote.note?.trim() ?? ""}`
+        ];
+
+        const clearThought = quote.clearThought?.trim();
+        if (clearThought) {
+          parts.push(`清思：${clearThought}`);
+        }
+
+        return parts.join("\n");
+      })
+      .join("\n\n");
+
+    const payload = [
+      "【和G老师一起读书｜共读页】",
+      `当前位置：${props.session.userCurrentPosition.label}`,
+      "",
+      "【当前页正文】",
+      current.trim(),
+      ...(thoughtText
+        ? ["", "【我保存的想法】", thoughtText]
+        : []),
+      "",
+      "请和我讨论这一页。优先回应我的想法，不必重新概括整页。"
+    ].join("\n");
+
+    try {
+      await writeTextToClipboard(payload);
+      setCopyState("copied");
+      window.setTimeout(() => setCopyState("idle"), 1800);
+    } catch {
+      setCopyState("error");
+      window.setTimeout(() => setCopyState("idle"), 2200);
+    }
   }
 
   return (
@@ -648,8 +691,10 @@ export function NovelReader(props: {
       </div>
       <ReaderActions
         primaryLabel="和G老师共读"
+        onCopy={() => void copyCurrentPageForG()}
         pageLabel={`${index + 1} / ${props.chunks.length}`}
         onPrimary={() => props.onSharePage(current)}
+        copyState={copyState}
         primaryDisabled={props.actionInFlight}
         onPage={openNavigation}
         onFinish={props.onFinish}
@@ -741,4 +786,28 @@ function escapeRegExp(value: string) {
 
 function shorten(value: string, limit: number) {
   return value.length > limit ? `${value.slice(0, limit)}…` : value;
+}
+
+async function writeTextToClipboard(text: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  textarea.style.pointerEvents = "none";
+
+  document.body.appendChild(textarea);
+  textarea.select();
+
+  const copied = document.execCommand("copy");
+  textarea.remove();
+
+  if (!copied) {
+    throw new Error("Clipboard copy failed");
+  }
 }

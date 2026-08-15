@@ -1,9 +1,11 @@
-import { Bookmark, LoaderCircle, Sparkles } from "lucide-react";
+import { Bookmark, Check, Copy, LoaderCircle, Sparkles } from "lucide-react";
 
 export function ReaderActions(props: {
   primaryLabel: string;
   pageLabel: string;
   onPrimary: () => void;
+  onCopy: () => void;
+  copyState?: "idle" | "copied" | "error";
   onPage: () => void;
   onFinish: () => void;
   primaryDisabled?: boolean;
@@ -23,6 +25,25 @@ export function ReaderActions(props: {
           <Sparkles className="reader-action-icon" aria-hidden="true" strokeWidth={1.8} />
         )}
         <span>{props.primaryDisabled ? "正在共读…" : props.primaryLabel}</span>
+      </button>
+      <button
+        type="button"
+        className="reader-finish-action"
+        onClick={props.onCopy}
+        aria-label="复制当前页给G老师"
+      >
+        {props.copyState === "copied" ? (
+          <Check className="reader-action-icon" aria-hidden="true" strokeWidth={1.8} />
+        ) : (
+          <Copy className="reader-action-icon" aria-hidden="true" strokeWidth={1.8} />
+        )}
+        <span>
+          {props.copyState === "copied"
+            ? "已复制"
+            : props.copyState === "error"
+              ? "复制失败"
+              : "复制给G老师"}
+        </span>
       </button>
       <button
         type="button"
