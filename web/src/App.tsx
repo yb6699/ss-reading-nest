@@ -19,7 +19,9 @@ import type {
   SourceManifest
 } from "@ss/shared";
 import {
+  buildPdfDocumentSource,
   DEFAULT_SESSION_PREFERENCES,
+  NOVEL_SEGMENTATION_VERSION,
   splitPdfDocumentSource
 } from "@ss/shared";
 import {
@@ -41,6 +43,7 @@ import { BookManagementSheet } from "./components/BookManagementSheet.js";
 import { SyncChoiceSheet } from "./components/SyncChoiceSheet.js";
 import { SyncProgressSheet } from "./components/SyncProgressSheet.js";
 import { readEpub } from "./features/import/read-epub.js";
+import { readPdf } from "./features/import/read-pdf.js";
 import { splitNovelText, splitNovelTextForVersion } from "./features/novel/split-text.js";
 import { CloudSourceClient } from "./features/source-cloud/cloud-source-client.js";
 import type { CloudUploadDiagnostics } from "./features/source-cloud/cloud-source-client.js";
@@ -146,6 +149,7 @@ const cloudRestoreJobs = new Map<
 const cloudRestoredSources = new Map<string, NovelLocalCache>();
 const MAX_NOVEL_FILE_SIZE = 5 * 1024 * 1024;
 const MAX_EPUB_FILE_SIZE = 50 * 1024 * 1024;
+const MAX_PDF_FILE_SIZE = 100 * 1024 * 1024;
 const LARGE_NOVEL_TEXTAREA_PREVIEW_BYTES = 2 * 1024 * 1024;
 const LARGE_NOVEL_TEXTAREA_PREVIEW_CHARS = 1200;
 
@@ -168,6 +172,8 @@ export function App() {
   const [existingSession, setExistingSession] = useState<ReadingSession | null>(null);
   const [title, setTitle] = useState("");
   const [sourceText, setSourceText] = useState("");
+  const [sourceDocumentStructure, setSourceDocumentStructure] =
+    useState<DocumentStructure | undefined>(undefined);
   const [remembered, setRemembered] = useState(false);
   const [recent, setRecent] = useState<BookshelfItem[]>(
     () =>
@@ -458,6 +464,7 @@ export function App() {
     setExistingSession(null);
     setTitle("");
     setSourceText("");
+    setSourceDocumentStructure(undefined);
     setRemembered(true);
     setSourceAvailability("unknown");
     setScreen("setup");
@@ -540,6 +547,9 @@ export function App() {
     if (local && "chunks" in local && (availability === "available_local" || availability === "unknown")) {
       setChunks(local.chunks);
       setSourceText(local.sourceText);
+      setSourceDocumentStructure(
+        "documentStructure" in local ? local.documentStructure : undefined
+      );
       setRemembered(true);
       setScreen("novel");
       return;
@@ -562,6 +572,7 @@ export function App() {
     setExistingSession(item.session);
     setTitle(item.session.title);
     setSourceText("");
+    setSourceDocumentStructure(undefined);
     setRemembered(true);
     setScreen("setup");
     setToast(sourceReimportMessage(item.sourceAvailability));
@@ -730,10 +741,11 @@ export function App() {
 
   async function importNovelFile(file: File | undefined) {
     if (!file) return;
+    const isPdf = /\.pdf$/i.test(file.name) || file.type === "application/pdf";
     const isEpub = /\.epub$/i.test(file.name) || file.type === "application/epub+zip";
     const isText = /\.(txt|md|markdown)$/i.test(file.name);
-    if (!isEpub && !isText) {
-      setToast("目前支持 EPUB、TXT 和 Markdown 文档。");
+    if (!isPdf && !isEpub && !isText) {
+      setToast("目前支持 PDF、EPUB、TXT 和 Markdown 文档。");
       setImportProgress({
         stage: "failed",
         fileName: file.name,
@@ -744,16 +756,26 @@ export function App() {
       });
       return;
     }
-    const sizeLimit = isEpub ? MAX_EPUB_FILE_SIZE : MAX_NOVEL_FILE_SIZE;
+    const sizeLimit = isPdf
+      ? MAX_PDF_FILE_SIZE
+      : isEpub
+        ? MAX_EPUB_FILE_SIZE
+        : MAX_NOVEL_FILE_SIZE;
     if (file.size > sizeLimit) {
-      setToast(isEpub ? "EPUB 超过 50 MB，请换一个较小版本。" : "文档超过 5 MB，请拆分后再导入。");
+      setToast(
+        isPdf
+          ? "PDF 超过 100 MB，请换一个较小版本。"
+          : isEpub
+            ? "EPUB 超过 50 MB，请换一个较小版本。"
+            : "文档超过 5 MB，请拆分后再导入。"
+      );
       setImportProgress({
         stage: "failed",
         fileName: file.name,
         fileSize: file.size,
         sourceEndpointBasePresent: Boolean(sourceEndpointBase),
         screen,
-        message: `文件超过 ${isEpub ? "50" : "5"} MB`
+        message: `文件超过 ${isPdf ? "100" : isEpub ? "50" : "5"} MB`
       });
       return;
     }
@@ -767,13 +789,32 @@ export function App() {
       message: "正在读取文件"
     });
     try {
-      const parsed = isEpub
-        ? await readEpub(file)
-        : { title: "", text: await readTextFile(file) };
-      const result = parsed.text;
+      let parsedTitle = "";
+      let result = "";
+      let documentStructure: DocumentStructure | undefined;
+
+      if (isPdf) {
+        const parsedPdf = await readPdf(file);
+        const pdfSource = buildPdfDocumentSource(parsedPdf.pages);
+        parsedTitle = parsedPdf.title;
+        result = pdfSource.sourceText;
+        documentStructure = pdfSource.documentStructure;
+      } else if (isEpub) {
+        const parsedEpub = await readEpub(file);
+        parsedTitle = parsedEpub.title;
+        result = parsedEpub.text;
+      } else {
+        result = await readTextFile(file);
+      }
+
       if (!result.trim()) {
         setSourceText("");
-        setToast("文档解析为空；如果 EPUB 带有加密，请换无加密版本或转成 TXT。");
+        setSourceDocumentStructure(undefined);
+        setToast(
+          isPdf
+            ? "PDF 没有提取到可读文字；它可能是扫描版 PDF，需要先进行 OCR。"
+            : "文档解析为空；如果 EPUB 带有加密，请换无加密版本或转成 TXT。"
+        );
         setImportProgress((current) => ({
           ...current,
           stage: "failed",
@@ -784,9 +825,12 @@ export function App() {
         return;
       }
       setSourceText(result);
+      setSourceDocumentStructure(documentStructure);
       setTitle(
         (current) =>
-          current.trim() || parsed.title || file.name.replace(/\.(epub|txt|md|markdown)$/i, "")
+          current.trim() ||
+          parsedTitle ||
+          file.name.replace(/\.(pdf|epub|txt|md|markdown)$/i, "")
       );
       setImportProgress((current) => ({
         ...current,
@@ -796,18 +840,27 @@ export function App() {
         screen,
         message: file.size > LARGE_NOVEL_TEXTAREA_PREVIEW_BYTES ? "大文件已读取，准备分段" : "文档已读取"
       }));
-      setToast(isEpub ? "EPUB 已导入并提取正文。" : "文档已导入，你仍然可以继续编辑正文。");
-    } catch {
       setToast(
-        isEpub
-          ? "EPUB 读取失败；它可能带有加密或特殊压缩，可以先转成 TXT。"
-          : "读取失败，请确认文件是 UTF-8 文本，或改用复制粘贴。"
+        isPdf
+          ? "PDF 已导入，并保留物理页边界。"
+          : isEpub
+            ? "EPUB 已导入并提取正文。"
+            : "文档已导入，你仍然可以继续编辑正文。"
+      );
+    } catch {
+      setSourceDocumentStructure(undefined);
+      setToast(
+        isPdf
+          ? "PDF 读取失败；文件可能损坏、加密，或使用了暂不支持的结构。"
+          : isEpub
+            ? "EPUB 读取失败；它可能带有加密或特殊压缩，可以先转成 TXT。"
+            : "读取失败，请确认文件是 UTF-8 文本，或改用复制粘贴。"
       );
       setImportProgress((current) => ({
         ...current,
         stage: "failed",
         screen,
-        message: isEpub ? "EPUB 解析失败" : "读取失败"
+        message: isPdf ? "PDF 解析失败" : isEpub ? "EPUB 解析失败" : "读取失败"
       }));
     }
   }
@@ -837,7 +890,13 @@ export function App() {
       }));
       await nextFrame();
       if (!requestIsCurrent()) return;
-      novelChunks = splitNovelText(sourceText);
+      novelChunks = sourceDocumentStructure
+        ? splitPdfDocumentSource(
+            sourceText,
+            sourceDocumentStructure,
+            NOVEL_SEGMENTATION_VERSION
+          ).map((chunk) => chunk.text)
+        : splitNovelText(sourceText);
       if (novelChunks.length === 0) {
         setImportProgress((current) => ({
           ...current,
@@ -887,7 +946,7 @@ export function App() {
     if (!requestIsCurrent()) return;
     let sourceManifest = await createNovelSourceManifest({
       sourceId: session.sourceManifest?.sourceId ?? createClientId(),
-      sourceKind: "pasted_text",
+      sourceKind: sourceDocumentStructure ? "file_import" : "pasted_text",
       title: title.trim(),
       sourceText
     });
@@ -922,7 +981,9 @@ export function App() {
       const upload = await cloudSourceClient.uploadNovelSource({
           sessionId,
           title: title.trim(),
-          sourceText
+          sourceText,
+          sourceKind: sourceDocumentStructure ? "file_import" : "pasted_text",
+          documentStructure: sourceDocumentStructure
         });
       if (!requestIsCurrent()) return;
       cloudDiagnostics = upload.diagnostics;
@@ -1043,7 +1104,13 @@ export function App() {
           message: "正在保存本设备缓存"
         }));
         await nextFrame();
-        await rememberNovel(session, sourceText, novelChunks, sourceManifest);
+        await rememberNovel(
+          session,
+          sourceText,
+          novelChunks,
+          sourceManifest,
+          sourceDocumentStructure
+        );
         if (!requestIsCurrent()) return;
         setImportProgress((current) => ({
           ...current,
@@ -1985,6 +2052,7 @@ export function App() {
                 readOnly={usingLargeNovelPreview}
                 onChange={(e) => {
                   setSourceText(e.target.value);
+                  setSourceDocumentStructure(undefined);
                   setImportProgress({ stage: "idle" });
                 }}
                 placeholder="粘贴 TXT 或 Markdown 文本"
@@ -1996,18 +2064,18 @@ export function App() {
               ) : null}
               <div className="source-import-row">
                 <label className="source-import-button">
-                  上传 EPUB / TXT / Markdown
+                  上传 PDF / EPUB / TXT / Markdown
                   <input
-                    aria-label="上传 TXT / Markdown"
+                    aria-label="上传 PDF / EPUB / TXT / Markdown"
                     type="file"
-                    accept=".epub,.txt,.md,.markdown,application/epub+zip,text/plain,text/markdown"
+                    accept=".pdf,.epub,.txt,.md,.markdown,application/pdf,application/epub+zip,text/plain,text/markdown"
                     onChange={(event) => {
                       void importNovelFile(event.target.files?.[0]);
                       event.target.value = "";
                     }}
                   />
                 </label>
-                <span>支持 EPUB、TXT 和 Markdown；EPUB 会自动提取章节正文。</span>
+                <span>支持 PDF、EPUB、TXT 和 Markdown；PDF 会保留物理页边界。</span>
               </div>
               <ImportProgressPanel progress={importProgress} />
             </div>

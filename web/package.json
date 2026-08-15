@@ -13,6 +13,7 @@
     "@modelcontextprotocol/ext-apps": "1.7.4",
     "@ss/shared": "workspace:*",
     "lucide-react": "^1.27.0",
+    "pdfjs-dist": "^6.2.108",
     "react": "19.2.7",
     "react-dom": "19.2.7"
   },
