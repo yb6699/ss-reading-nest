@@ -44,6 +44,24 @@ export interface ReadingPosition {
   label: string;
 }
 
+export interface PdfPageMapping {
+  /** 1-based physical page number in the PDF file. */
+  pdfPageNumber: number;
+  /** Character offsets into the canonical sourceText; start inclusive, end exclusive. */
+  startOffset: number;
+  endOffset: number;
+  /** Logical/printed page label when known, e.g. "153" or "xii". */
+  printedPageLabel?: string;
+}
+
+export interface PdfDocumentStructure {
+  schemaVersion: 1;
+  format: "pdf";
+  pages: PdfPageMapping[];
+}
+
+export type DocumentStructure = PdfDocumentStructure;
+
 export interface SourceManifest {
   sourceId: string;
   sourceKind: SourceKind;
