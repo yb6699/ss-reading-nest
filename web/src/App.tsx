@@ -7,6 +7,7 @@ import {
 } from "react";
 import { ArrowLeft, BookOpen, LoaderCircle } from "lucide-react";
 import type {
+  DocumentStructure,
   NovelLocalCache,
   Quote,
   ReadingPosition,
@@ -17,7 +18,10 @@ import type {
   SourceAvailability,
   SourceManifest
 } from "@ss/shared";
-import { DEFAULT_SESSION_PREFERENCES } from "@ss/shared";
+import {
+  DEFAULT_SESSION_PREFERENCES,
+  splitPdfDocumentSource
+} from "@ss/shared";
 import {
   askChatGpt,
   callTool,
@@ -2465,16 +2469,26 @@ async function rememberNovel(
   session: ReadingSession,
   sourceText: string,
   chunks: string[],
-  sourceManifest: SourceManifest
+  sourceManifest: SourceManifest,
+  documentStructure?: DocumentStructure
 ) {
-  await cache.put(createNovelLocalCache(session, sourceText, chunks, sourceManifest));
+  await cache.put(
+    createNovelLocalCache(
+      session,
+      sourceText,
+      chunks,
+      sourceManifest,
+      documentStructure
+    )
+  );
 }
 
 function createNovelLocalCache(
   session: ReadingSession,
   sourceText: string,
   chunks: string[],
-  sourceManifest: SourceManifest
+  sourceManifest: SourceManifest,
+  documentStructure?: DocumentStructure
 ): NovelLocalCache {
   return {
     metadata: {
@@ -2489,7 +2503,8 @@ function createNovelLocalCache(
       updatedAt: new Date().toISOString()
     },
     sourceText,
-    chunks
+    chunks,
+    ...(documentStructure ? { documentStructure } : {})
   };
 }
 
@@ -2509,10 +2524,16 @@ async function restoreNovelFromCloudOnce(
       timeoutMs,
       "cloud source restore timed out"
     );
-    const restoredChunks = splitNovelTextForVersion(
-      restored.sourceText,
-      restored.sourceManifest.segmentationVersion
-    );
+    const restoredChunks = restored.documentStructure
+      ? splitPdfDocumentSource(
+          restored.sourceText,
+          restored.documentStructure,
+          restored.sourceManifest.segmentationVersion
+        ).map((chunk) => chunk.text)
+      : splitNovelTextForVersion(
+          restored.sourceText,
+          restored.sourceManifest.segmentationVersion
+        );
     const localManifest = {
       ...restored.sourceManifest,
       paragraphCount: restoredChunks.length
@@ -2532,7 +2553,8 @@ async function restoreNovelFromCloudOnce(
       restoredSession,
       restored.sourceText,
       restoredChunks,
-      restored.sourceManifest
+      restored.sourceManifest,
+      restored.documentStructure
     );
     cloudRestoredSources.set(key, localCache);
     await cache.put(localCache).catch(() => undefined);
